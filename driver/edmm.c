@@ -5,6 +5,8 @@
  * Copyright (C) 2020-2023 The HyperEnclave Project. All rights reserved.
  */
 
+#include "edmm.h"
+
 #include <linux/mm.h>
 #include <linux/slab.h>
 
@@ -15,6 +17,7 @@
 #include "feature.h"
 #include "reclaim.h"
 #include "ioctl.h"
+
 
 /**
  * he_encl_aug_page() - Dynamically add page to an initialized enclave
@@ -29,6 +32,18 @@
  * or there is no free EPC page for the enclave, VM_FAULT_NOPAGE is returned.
  * On error, VM_FAULT_SIGBUS or VM_FAULT_OOM is returned.
  */
+/// 向 encalve 添加页面
+/// ? 此函数庆当在发生缺页访问时被调用
+/// ~~ vma: 表示缺页故障的虚拟地址，通常是 enclave 所在的内存区域 (?) (难道还能不是吗)
+/// vma: 触发页面故障的内存区域
+/// encl: 指向执行访问的 enclave (enclave 是指一个进程？还是根据 SGX 的意思，指向一种 SGX 资源？)
+/// addr: 触发页面故障的具体地址
+/// 
+/// 当一个已初始化的 enclave 访问一个没有 EPC 的页面时，页相应 EPC 将会通过 HYPERCALL[AUG] 动态添加
+/// 
+/// 返回时，PTE 将成功安装 
+/// 如果没有多余的 EPC 页面，则返回 VM_FAULT_NOPAGE. 
+/// 如果出现其他错误，则返回 VM_FAULT_SIGBUS / VM_FAULT_OOM 
 vm_fault_t he_encl_aug_page(struct vm_area_struct *vma, struct he_enclave *encl,
 			    unsigned long addr)
 {

@@ -188,19 +188,48 @@ int find_enclave(struct mm_struct *mm, unsigned long addr,
 		 struct he_enclave **encl)
 {
 	struct vm_area_struct *vma;
+	struct he_enclave *encl_data; 
 
-	down_read(&mm->mmap_sem);
+	// mmap_sem 字段不存在，使用 mmap_lock 代替
+	// down_read(&mm->mmap_sem);
+	down_read(&mm->mmap_lock);
+
 	vma = find_vma(mm, addr);
+	// 检查 vma 的可用性. 
+	// - vma 在 mm 存在
+	// - vma 所对应的 vm ops 属于 he vm ops 
+	// - 地址在 vma start 与 vma end 之间 (?), 不是 find 了吗？
 	if (!vma || vma->vm_ops != &he_vm_ops || addr < vma->vm_start) {
 		up_read(&mm->mmap_sem);
 		he_err("find_vma failed\n");
 		return -EINVAL;
 	}
 
-	*encl = vma->vm_private_data;
-	up_read(&mm->mmap_sem);
+	// 原代码此处有两步，外部读入+外部写出
+	// 事实上，外部写出可以推迟到锁放锁操作完成，以加快锁操作
+	// 这理应不会造成错误——如果这会出错，那这个函数释放锁的行为就是错的
+	// *encl = vma->vm_private_data;
+	// up_read(&mm->mmap_sem);
 
-	return *encl ? 0 : -ENOENT;
+	// 改成只做外部读入
+	encl_data = vma->vm_private_data; 
+	up_read(&mm->mmap_lock); 
+
+	// 外部写出 
+	*encl = encl_data; 
+
+	// 局部读入
+	if (encl_data) {
+		return 0; 
+	} else {
+		return -ENOENT; 
+	}
+
+	// 移除一次外部读入，由于锁的屏障作用，此处读入可能不能被优化 (?) 
+	// 也可能可以就是说... 写出操作只阻止其他操作推迟 (?) 
+	// 不影响读入操作提前.. 
+	// 但可能作为一个屏障阻挡编译器优化，于是手动调整. 
+	// return *encl ? 0 : -ENOENT;
 }
 
 int he_cmd_encl_create(struct he_encl_create __user *arg)
