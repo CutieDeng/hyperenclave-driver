@@ -5,10 +5,12 @@
  * Copyright (C) 2020-2023 The HyperEnclave Project. All rights reserved.
  */
 
-#ifndef _HYPERENCLAVE_ENCLAVE_CONFIG_H
-#define _HYPERENCLAVE_ENCLAVE_CONFIG_H
+#pragma once 
 
-#include <asm/page_types.h>
+// #include <asm/page_types.h>
+
+#include <asm/page.h> 
+
 #include <linux/types.h>
 
 /* The modulus size for 3072-bit RSA keys. */
@@ -130,5 +132,3 @@ enum he_return_code {
 	PREV_TRK_INCMPL = 0x40000011,
 	CANCEL_RECLAIM = 0x4000001d,
 };
-
-#endif /* _HYPERENCLAVE_ENCLAVE_CONFIG_H */

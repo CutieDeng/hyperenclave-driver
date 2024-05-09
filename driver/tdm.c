@@ -9,7 +9,13 @@
 #include <hyperenclave/vendor.h>
 
 extern const struct tdm_ops hygon_tdm_ops;
-struct tdm tdm;
+/// 全局的 trust domain manager 实例
+/// 救命，为什么要用同名变量呀，求你有点良心吧！
+/// 加个别名 global_tdm 给你
+struct tdm tdm 
+// [[gnu::alias("global_tdm")]]
+__alias(global_tdm)
+; 
 
 static int generic_proc_init(void)
 {
@@ -52,6 +58,9 @@ static unsigned long long generic_get_tdm_size(void)
 	return 0;
 }
 
+/// @brief 默认虚表就跟全 NULL 有啥区别？为什么要搞这么复杂... 
+/// 直接把 ops 设成 NULL 得了还不如..
+/// 这样还可以确定是否有 trust domain manager 实装
 const struct tdm_ops generic_tdm_ops = {
 	.proc_init = generic_proc_init,
 	.proc_remove = generic_proc_remove,

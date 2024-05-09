@@ -5,8 +5,7 @@
  * Copyright (C) 2020-2023 The HyperEnclave Project. All rights reserved.
  */
 
-#ifndef _HYPERENCLAVE_SME_H
-#define _HYPERENCLAVE_SME_H
+#pragma once 
 
 #ifdef CONFIG_X86
 unsigned long get_sme_mask(void);
@@ -15,5 +14,3 @@ unsigned long get_sme_mask(void)
 {
 }
 #endif
-
-#endif /* _HYPERENCLAVE_SME_H */

@@ -5,8 +5,7 @@
  * Copyright (C) 2020-2023 The HyperEnclave Project. All rights reserved.
  */
 
-#ifndef _HYPERENCLAVE_HYPERCALL_H
-#define _HYPERENCLAVE_HYPERCALL_H
+#pragma once 
 
 #include <hyperenclave/enclave_config.h>
 
@@ -268,6 +267,5 @@ struct hc_encl_modt_page_desc {
 struct hc_encl_remove_page_at_runtime_desc {
 	__u64 config_addr;
 	__u64 enclave_lin_addr;
-} __aligned(64);
-
-#endif /* !_HYPERCALL_H */
+// } __aligned(64);
+} [[gnu::aligned(4)]];
