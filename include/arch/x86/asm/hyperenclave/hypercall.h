@@ -5,8 +5,7 @@
  * Copyright (C) 2020-2023 The HyperEnclave Project. All rights reserved.
  */
 
-#ifndef _ASM_X86_HYPERENCLAVE_HYPERCALL_H
-#define _ASM_X86_HYPERENCLAVE_HYPERCALL_H
+#pragma once 
 
 #define hypercall_ret_N(inputs...)                                    \
 	({                                                            \
@@ -30,6 +29,29 @@
 		ret;                                                  \
 	})
 
+// #define hypercall_ret_N(inputs...)                                    \
+// 	({                                                            \
+// 		int ret;                                              \
+// 		asm volatile("cmp %[use_hvc], #1\n\t"                 \
+// 			     "bne 2f\n\t"                             \
+// 			     "1:\n"                                   \
+// 			     "   hvc #0\n\t"                         \
+// 			     "   b 3f\n\t"                           \
+// 			     "2:\n"                                   \
+// 			     "   smc #0\n\t"                         \
+// 			     "3:\n"                                   \
+// 			     ".section .fixup,\"ax\"\n"               \
+// 			     "4:\n"                                   \
+// 			     "   b 3b\n"                             \
+// 			     ".previous\n" _ASM_EXTABLE_FAULT(1b, 4b) \
+// 				     _ASM_EXTABLE_FAULT(2b, 4b)       \
+// 			     : "=r"(ret)                              \
+// 			     : [use_hvc] "r"(use_hvc), inputs         \
+// 			     : "memory", "cc");                       \
+// 		ret;                                                  \
+// 	})
+
+
 #define hypercall_ret_0(rax) ({ hypercall_ret_N("a"(rax)); })
 
 #define hypercall_ret_1(rax, rdi) ({ hypercall_ret_N("a"(rax), "D"(rdi)); })
@@ -49,5 +71,3 @@
  * @li @c true Use Intel's VMCALL.
  */
 extern bool use_vmcall;
-
-#endif

@@ -5,8 +5,7 @@
  * Copyright (C) 2020-2023 The HyperEnclave Project. All rights reserved.
  */
 
-#ifndef _DRIVER_MAIN_H
-#define _DRIVER_MAIN_H
+#pragma once 
 
 #include <linux/io.h>
 #include <linux/mutex.h>
@@ -15,6 +14,7 @@
 
 #include <hyperenclave/system_config.h>
 
+/// 基于 kallsyms_lookup_name, 动态解析符号地址
 #define RESOLVE_EXTERNAL_SYMBOL(symbol)                               \
 	do {                                                          \
 		symbol##_sym = (void *)kallsyms_lookup_name(#symbol); \
@@ -33,7 +33,9 @@ extern void *hypervisor_mem;
 extern struct memory_range hv_range;
 extern unsigned long hv_core_and_percpu_size;
 
-extern typeof(printk_safe_flush) *printk_safe_flush_sym;
+typedef void printk_safe_flush_t(void ); 
+extern printk_safe_flush_t *printk_safe_flush_sym;
+// extern typeof(printk_safe_flush) *printk_safe_flush_sym;
 extern void (*mmput_async_sym)(struct mm_struct *mm);
 extern typeof(ioremap_page_range) *ioremap_page_range_sym;
 #ifdef CONFIG_X86
@@ -44,4 +46,3 @@ void he_ipi_cb(void *info);
 int he_cmd_disable(void);
 int he_cmd_enable(void);
 
-#endif /* !_DRIVER_MAIN_H */

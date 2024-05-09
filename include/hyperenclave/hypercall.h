@@ -267,5 +267,4 @@ struct hc_encl_modt_page_desc {
 struct hc_encl_remove_page_at_runtime_desc {
 	__u64 config_addr;
 	__u64 enclave_lin_addr;
-// } __aligned(64);
-} [[gnu::aligned(4)]];
+} __aligned(64); 
