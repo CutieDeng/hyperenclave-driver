@@ -1101,9 +1101,14 @@ struct encl_page *he_encl_load_page(struct he_enclave *encl, unsigned long addr)
  * @encl: The enclave
  * @addr: Page aligned pointer to the signle page whose PTE needs to be removed
  */
+/// 从地址空间中移除映射到该地址的 PTE 
+/// encl: 被操作的 enclave 
+/// addr: 待移除的 PTE 相应页面开始的虚拟地址
 void he_zap_enclave_ptes(struct he_enclave *encl, unsigned long addr)
 {
 	struct vm_area_struct *vma;
+	// 外部访问感觉也太多了，稍稍给个缓存吧... 
+	struct mm_struct *mm; 
 
 	/*
 	 * If u-RTS munmap enclave address space failed, which will
@@ -1125,17 +1130,36 @@ void he_zap_enclave_ptes(struct he_enclave *encl, unsigned long addr)
 	 *     remove_vma_n
 	 *         desroy enclave
 	 */
-	if (!mmget_not_zero(encl->mm)) {
+	// ~~ 没看懂，检查发现 encl 的 mm 是 0 就直接退出？
+	// 不是对注释的翻译
+	// 
+	// 准确地说，是检查 mm 字段中 mm_users 是否为 0, 如果是 0 则退出
+	// 因为这说明这段内存空间已经没有用户了 emmm, 
+	// 所以 encl 的 mm 将被释放掉，就用不着 zap pte 了 
+	// 否则，则增加一 user, 即 mm_users 字段值 +1, 防止 use-after-free 
+	// 感觉设计有点像 hazard pointer. 
+	mm = encl->mm; 
+	// if (!mmget_not_zero(encl->mm)) {
+	if (!mmget_not_zero(mm)) {
 		return;
 	}
 
-	down_read(&encl->mm->mmap_sem);
-	vma = find_vma(encl->mm, addr);
+	// down_read(&encl->mm->mmap_sem);
+
+	down_read(&mm->mmap_lock);
+	vma = find_vma(mm, addr);
+	// 这里硬编码了一个 PAGE_SIZE, 
+	// 也就是说，这个 zap enclave page 调用只支持处理简单的 PAGE_SIZE 页面的移除？
+	// 这个设计 ??? 
 	if (vma && encl == vma->vm_private_data) {
 		zap_vma_ptes(vma, addr, PAGE_SIZE);
 	}
-	up_read(&encl->mm->mmap_sem);
-	mmput_async_sym(encl->mm);
+
+	// up_read(&encl->mm->mmap_sem);
+	up_read(&mm->mmap_lock);
+
+	// mmput_async_sym(encl->mm);
+	mmput_async_sym(mm);
 }
 
 int encl_track(struct he_enclave *encl)
