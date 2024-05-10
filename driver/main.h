@@ -34,6 +34,13 @@ extern struct memory_range hv_range;
 extern unsigned long hv_core_and_percpu_size;
 
 typedef void printk_safe_flush_t(void ); 
+/// @brief 根据 Linux kernel 上对 printk_safe_flush 的描述：
+/// printk_safe_flush - flush all per-cpu nmi buffers. 
+/// 
+/// The buffers are flushed automatically via IRQ work. 
+/// This function is useful only when someone wants to be sure that all buffers have been flushed at some point. 
+/// 
+/// 换
 extern printk_safe_flush_t *printk_safe_flush_sym;
 // extern typeof(printk_safe_flush) *printk_safe_flush_sym;
 extern void (*mmput_async_sym)(struct mm_struct *mm);

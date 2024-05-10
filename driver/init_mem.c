@@ -5,6 +5,7 @@
  * Copyright (C) 2020-2023 The HyperEnclave Project. All rights reserved.
  */
 
+
 #include <asm/e820/types.h>
 
 #include <linux/kernel.h>

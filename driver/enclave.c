@@ -200,7 +200,8 @@ int find_enclave(struct mm_struct *mm, unsigned long addr,
 	// - vma 所对应的 vm ops 属于 he vm ops 
 	// - 地址在 vma start 与 vma end 之间 (?), 不是 find 了吗？
 	if (!vma || vma->vm_ops != &he_vm_ops || addr < vma->vm_start) {
-		up_read(&mm->mmap_sem);
+		// up_read(&mm->mmap_sem);
+		up_read(&mm->mmap_lock);
 		he_err("find_vma failed\n");
 		return -EINVAL;
 	}
@@ -232,6 +233,9 @@ int find_enclave(struct mm_struct *mm, unsigned long addr,
 	// return *encl ? 0 : -ENOENT;
 }
 
+/// @brief 创建一个 enclave 
+/// @param arg 
+/// @return 
 int he_cmd_encl_create(struct he_encl_create __user *arg)
 {
 	int err;
@@ -241,17 +245,24 @@ int he_cmd_encl_create(struct he_encl_create __user *arg)
 	struct vm_area_struct *vma;
 	struct file *backing;
 
+	// 原实现的顺序是不是不太合理，应当快速连续访问两个值才对？
+	// 还是因为 config 的结构比较复杂，决定推迟复制操作
+
+	// 从用户空间复制相关的参数
 	err = copy_from_user(&params, arg, sizeof(params));
 	if (err) {
 		he_err("copy_from_user arg failed\n");
 		return -EFAULT;
 	}
 	user_config = (void __user *)params.config_address;
+	// 分配内存？使用哪个分配器进行的内存分配呢？
 	encl = kzalloc(sizeof(*encl), GFP_KERNEL);
 	if (!encl) {
 		he_err("kzalloc failed\n");
 		return -ENOMEM;
 	} else {
+		// ... 
+		he_info("[CUTIE]: alloc with %zu size. ", sizeof *encl); 
 		he_info("encl: 0x%px", encl);
 	}
 	encl->owner = current;
@@ -268,6 +279,8 @@ int he_cmd_encl_create(struct he_encl_create __user *arg)
 		goto out_destroy_encl;
 	}
 
+	// file backing 是什么意思？
+	// 为什么 enclave 需要创建一个文件用于备用 (?) 
 	/* File backing size consists of total enclave pages's size and PCMD size */
 	backing = shmem_file_setup("HE backing",
 				   encl->config.size + (encl->config.size / PCMD_COUNT),
@@ -278,12 +291,15 @@ int he_cmd_encl_create(struct he_encl_create __user *arg)
 		goto out_destroy_encl;
 	}
 	encl->backing = backing;
+
+	// 一通初始化 
 	INIT_LIST_HEAD(&encl->va_pages);
 	INIT_RADIX_TREE(&encl->page_tree, GFP_KERNEL);
 	mutex_init(&encl->lock);
 	mutex_init(&encl->etrack_lock);
 	kref_init(&encl->refcount);
 	stats_init(encl);
+
 	/* memory map enclave gva to gpa */
 	he_info("encl: 0x%px, encl.start_gva=0x%llx, encl_size: 0x%llx\n", encl,
 		encl->config.start_gva, encl->config.size);
@@ -295,13 +311,16 @@ int he_cmd_encl_create(struct he_encl_create __user *arg)
 	}
 
 	encl->mm = current->mm;
-	down_read(&current->mm->mmap_sem);
+	// down_read(&current->mm->mmap_sem);
+	down_read(&current->mm->mmap_lock);
 	vma = find_vma(current->mm, encl->config.start_gva);
 	if (vma) {
 		vma->vm_private_data = encl;
-		up_read(&current->mm->mmap_sem);
+		// up_read(&current->mm->mmap_sem);
+		up_read(&current->mm->mmap_lock);
 	} else {
-		up_read(&current->mm->mmap_sem);
+		// up_read(&current->mm->mmap_sem);
+		up_read(&current->mm->mmap_lock);
 		err = -EINVAL;
 		he_err("encl: 0x%px, find_vma failed\n", encl);
 		goto out_destroy_backing;
@@ -324,6 +343,12 @@ out_destroy_encl:
 	return err;
 }
 
+/// 在 enclave 中添加一个新页面
+/// arg: struct he_encl_add_page, 包含四个字段：
+/// source_address: 
+/// enclave_lin_addr
+/// flags
+/// attr
 int he_cmd_encl_add_page(struct he_encl_add_page __user *arg)
 {
 	struct he_encl_add_page eap;
@@ -341,7 +366,10 @@ int he_cmd_encl_add_page(struct he_encl_add_page __user *arg)
 	struct vm_area_struct *vma;
 	unsigned long sec_info;
 	struct va_page *va_page;
+	/// 用于缓当当前任务/进程的内存管理器
+	struct mm_struct *current_mm; 
 
+	// 将参数从用户空间移至当前内核栈上 
 	err = copy_from_user(&eap, arg, sizeof(eap));
 	if (err) {
 		he_err("copy_from_user arg failed\n");
@@ -357,6 +385,7 @@ int he_cmd_encl_add_page(struct he_encl_add_page __user *arg)
 	 * should we allow the process to map a read-only page as writable in
 	 * enclave mode?
 	 */
+	// 检查该空间是否已经属于内核空间. 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0)
 	if (!access_ok((void __user *)source_address, PAGE_SIZE)) {
 #else
@@ -373,7 +402,14 @@ int he_cmd_encl_add_page(struct he_encl_add_page __user *arg)
 		return -EFAULT;
 	}
 
-	err = find_enclave(current->mm, enclave_lin_addr, &encl);
+	// 提前获取 current->mm 
+	current_mm = current -> mm; 
+
+	// 查找 enclave? 
+	// ? enclave 并不与内存空间直接关联，而是以某种形式存在于一个进程内部，
+	// 所以需要通过内存空间 + 空间内的具体某一点来确定一个 enclave. 
+	// err = find_enclave(current->mm, enclave_lin_addr, &encl);
+	err = find_enclave(current_mm, enclave_lin_addr, &encl);
 	if (err) {
 		he_err("Source page does not belong to any existing enclave:"
 		       " enclave_lin_addr=0x%lx\n",
@@ -386,6 +422,9 @@ int he_cmd_encl_add_page(struct he_encl_add_page __user *arg)
 	 * offset = enclave_lin_addr - encl->config.start_gva;
 	 * epc_page_pa = g_epc_base_gpa + offset;
 	 */
+	// 分配 EPC 页面
+	// EPC 是 intel sgx 用于辅助 enclave 进行内存管理的结构
+	// 那如果 epc 失败，怎么处理呢？
 	epc_entry = alloc_enclave_page(true);
 	if (IS_ERR(epc_entry)) {
 		he_err("encl: 0x%px, allocate enclave page failed. nr_free_epc_pages: %u\n",
@@ -393,6 +432,7 @@ int he_cmd_encl_add_page(struct he_encl_add_page __user *arg)
 		return PTR_ERR(epc_entry);
 	}
 
+	// 分配虚拟内存页
 	va_page = alloc_va_page(encl, true);
 	if (IS_ERR(va_page)) {
 		err = PTR_ERR(va_page);
@@ -405,36 +445,51 @@ int he_cmd_encl_add_page(struct he_encl_add_page __user *arg)
 		mutex_unlock(&encl->lock);
 	}
 
-	down_read(&current->mm->mmap_sem);
-	vma = find_vma(current->mm, enclave_lin_addr);
+	// down_read(&current->mm->mmap_sem);
+	down_read(&current_mm->mmap_lock);
+
+	// 查找 VMA, 并检查其地址有效性
+	// vma = find_vma(current->mm, enclave_lin_addr);
+	vma = find_vma(current_mm, enclave_lin_addr);
+	// 这个检查略显眼熟. 似乎在前面某个移除 PTE 操作中也存在 (?) 
 	if (!vma || vma->vm_ops != &he_vm_ops ||
 	    enclave_lin_addr < vma->vm_start) {
-		up_read(&current->mm->mmap_sem);
+		// up_read(&current->mm->mmap_sem);
+		up_read(&current_mm->mmap_lock);
 		he_err("encl: 0x%px, find_vma failed\n", encl);
 		err = -EINVAL;
 		goto err_free_va_page;
 	}
 
+	// 将新页面插入到 VMA 中
 	epc_page_pa = epc_entry->desc;
 	err = vmf_insert_pfn(vma, enclave_lin_addr, PFN_DOWN(epc_page_pa));
-	up_read(&current->mm->mmap_sem);
+
+	// up_read(&current->mm->mmap_sem);
+	up_read(&current_mm->mmap_lock);
+
 	if (err != VM_FAULT_NOPAGE) {
 		he_err("encl: 0x%px, insert_pfn failed\n", encl);
 		goto err_free_va_page;
 	}
 
+	// 分配和初始化 enclave 描述符
+	// struct encl_page: ? 
 	encl_page = kzalloc(sizeof(*encl_page), GFP_KERNEL);
 	if (!encl_page) {
 		err = -ENOMEM;
 		he_err("encl: 0x%px, kzalloc encl_page failed\n", encl);
 		goto err_free_va_page;
 	}
+
+	// 设置 encl_page 结构中其对应的值，即初始化
 	encl_page->desc = enclave_lin_addr;
 	encl_page->page_type = sec_info & HE_SECINFO_PERMISSION_PAGE_TYPE_MASK;
 	encl_page->epc_page = epc_entry;
 	encl_page->encl = encl;
 	epc_entry->encl_page = encl_page;
 
+	// 更新 radix 树
 	mutex_lock(&encl->lock);
 	encl->epc_page_cnt++;
 	if (radix_tree_lookup(&encl->page_tree,
@@ -451,7 +506,8 @@ int he_cmd_encl_add_page(struct he_encl_add_page __user *arg)
 		he_err("encl: 0x%px, radix_tree_insert failed\n", encl);
 		goto err_free_encl_page;
 	}
-
+	
+	// 复制新数据到新页面
 	data_page = alloc_page(GFP_HIGHUSER);
 	if (!data_page) {
 		err = -ENOMEM;
@@ -468,6 +524,7 @@ int he_cmd_encl_add_page(struct he_encl_add_page __user *arg)
 	}
 	source_page_k_pa = __pa(data);
 
+	// 设置页面描述信息
 	page_desc.config_address = (unsigned long)&encl->config;
 	page_desc.source_address = source_page_k_pa;
 	page_desc.enclave_lin_addr = enclave_lin_addr;
@@ -480,14 +537,19 @@ int he_cmd_encl_add_page(struct he_encl_add_page __user *arg)
 		goto err_free_data_page;
 	}
 
+	// 执行超级调用添加页面 
+	// （即系统调用 (?) 可能是用于请求硬件支持
 	err = hypercall_ret_1(HC_ENCL_ADD_PAGE, (unsigned long)&page_desc);
-	if (err)
+	if (err) {
 		goto err_free_data_page;
+	}
 
+	// 标记页面以备回收
 	if (encl_page->page_type != HE_SECINFO_TCS) {
 		mark_page_reclaimable(epc_entry);
 	}
 
+	// 清理临时映射和数据 
 	kunmap(data_page);
 	__free_page(data_page);
 	return err;
