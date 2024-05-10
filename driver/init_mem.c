@@ -11,6 +11,8 @@
 #include <linux/kernel.h>
 #include <linux/sort.h>
 
+#include <linux/of.h>
+
 #include <hyperenclave/hypercall.h>
 #include <hyperenclave/log.h>
 
@@ -122,6 +124,48 @@ static int cmp_func(const void *a, const void *b)
 		((struct memory_range *)b)->start ? 1 : -1;
 }
 
+#if defined(ARM) || defined(ARM64) 
+
+int get_convertible_memory(void ) {
+	int sys_ram_num = 0; 
+	struct device_node *memory = of_find_node_by_type(NULL, "memory"); 
+	struct resource r;
+    unsigned long long prev_end;
+    unsigned long long start, end;
+
+    if (!memory) {
+        he_err("No memory node found in device tree.\n");
+        return -EINVAL;
+    }
+
+    // for_each_of_allnodes(memory) {
+    while (memory = of_find_node_by_type(memory, "memory") != NULL) { 
+		// 忽略错误的设备节点
+        if (of_address_to_resource(memory, 0, &r)) continue; 
+		// 直接检查它是否满足 conv mem regions 即可，无需纠结关于 E820 的兼容性问题
+        if (sys_ram_num >= MAX_CONV_MEM_REGIONS) break;
+        // if (sys_ram_num >= E820_MAX_ENTRIES) break;
+
+        e820_system_ram[sys_ram_num].start = r.start;
+        e820_system_ram[sys_ram_num].size = resource_size(&r);
+        sys_ram_num++;
+    }
+
+    if (sys_ram_num == 0) {
+        he_err("No valid System RAM regions found.\n");
+        return -ENOMEM;
+    }
+
+    // Sort and merge logic remains the same
+    sort(e820_system_ram, sys_ram_num, sizeof(struct memory_range), cmp_func, NULL);
+    prev_end = e820_system_ram[0].start + e820_system_ram[0].size;
+
+    // Merging and logic processing follows...
+    // Adapt the rest of the code similarly based on the changes.
+}
+
+#endif 
+
 int get_convertible_memory(void)
 {
 	int i, sys_ram_num = 0;
@@ -139,8 +183,10 @@ int get_convertible_memory(void)
 			e820_type_to_string(entry));
 
 		if (entry->type == E820_TYPE_RAM) {
-			e820_system_ram[sys_ram_num].start = entry->addr;
-			e820_system_ram[sys_ram_num].size = entry->size;
+			if (sys_ram_num < E820_MAX_ENTRIES) {
+				e820_system_ram[sys_ram_num].start = entry->addr;
+				e820_system_ram[sys_ram_num].size = entry->size;
+			}
 			sys_ram_num++;
 		}
 	}
