@@ -125,6 +125,7 @@ static int cmp_func(const void *a, const void *b)
 }
 
 #if defined(ARM) || defined(ARM64) 
+// #if 1 
 
 int get_convertible_memory(void ) {
 	int sys_ram_num = 0; 
@@ -132,6 +133,9 @@ int get_convertible_memory(void ) {
 	struct resource r;
     unsigned long long prev_end;
     unsigned long long start, end;
+
+	unsigned nr_conv_mem_local; 
+	unsigned long long conv_mem_size_local; 
 
     if (!memory) {
         he_err("No memory node found in device tree.\n");
@@ -156,12 +160,87 @@ int get_convertible_memory(void ) {
         return -ENOMEM;
     }
 
+	// 此外排序算法使用的 cmp_func, 假定了所有 memory_range 都拥有不同的 start 字段
+	// 这听起来是一个很激进的假设.. 
+	// 也许应当还需要一个后验性的查询 (?) 
+	// 取决于排序算法实现本身对错误的偏序函数使用的 robust. 
     // Sort and merge logic remains the same
     sort(e820_system_ram, sys_ram_num, sizeof(struct memory_range), cmp_func, NULL);
     prev_end = e820_system_ram[0].start + e820_system_ram[0].size;
 
-    // Merging and logic processing follows...
-    // Adapt the rest of the code similarly based on the changes.
+	// 接下来，检查各字段是否有相互重叠！
+	// 特别的，如果有重叠，需要返回错误 -EINVAL
+	// question: 但为什么对设备树的 start 相同不加检验，却对其是否涉及重叠如此认真检查呢？
+	// 进行相关的检查 
+	i = 1; 
+	while (1) {
+		if (i >= sys_ram_num) {
+			break ; 
+		}
+		start = e820_system_ram[i].start; 
+		if (prev_end > start) {
+			he_err("The \"System RAM\" region in E820 overlaps, "
+			       "prev_end: 0x%llx, cur_start: 0x%llx\n",
+			       prev_end, start); 
+			return -EINVAL;
+		}
+		prev_end = start + e820_system_ram[i].size; 
+		i += 1; 
+	}
+	
+	// 将若干独立连续内存块合并为 conv 
+	nr_conv_mem_local = 0; 
+	i = 0; 
+	start = e820_system_ram[i].start; 
+	end = start + e820_system_ram[i].size; 
+	i = 1; 
+	while (1) {
+		if (i == sys_ram_num) {
+			// handle end 
+			goto conduct; 
+		}
+		if (end == e820_system_ram[i].start) {
+			end = end + e820_system_ram[i].size; 
+		} else {
+			goto conduct; 
+		}
+		if (0) {
+			conduct: 
+			start = ALIGN_UP(start, SZ_4K); 
+			end = ALIGN_DOWN(end, SZ_4K); 
+			if (start < end) {
+				conv_mem_ranges[nr_conv_mem_local] = { .start = start, .size = end - start }; 
+				nr_conv_mem_local += 1; 
+			}
+			if (i == sys_ram_num) {
+				break ; 
+			}
+			start = e820_system_ram[i].start; 
+			end = start + e820_system_ram[i].size; 
+		}
+		i += 1; 
+	}
+	nr_conv_mem = nr_conv_mem_local; 
+	conv_mem_start = conv_mem_ranges[0].start; 
+	conv_mem_end = conv_mem_ranges[nr_conv_mem_local - 1].start + 
+		conv_mem_ranges[nr_conv_mem_local - 1].size; 
+
+	// 处理一些统计信息，例如整理 conv mem 的大小
+	// question: 为什么块要对齐到页大小？
+	// 尽管这样理论上有道理——内存要求按页分配
+	// 但是这看起来损失了一些可用的物理内存？
+	// 按照上图的描述，UP 应该是增加，而 DOWN 是减少. 
+
+	conv_mem_size_local = 0; 
+	for (i = 0; i < nr_conv_mem_local; i++) {
+		he_info("Convertible Memory[%2d]: 0x%016llx -> 0x%016llx\n", i,
+			conv_mem_ranges[i].start,
+			conv_mem_ranges[i].start + conv_mem_ranges[i].size);
+		conv_mem_size_local += conv_mem_ranges[i].size;
+	}
+	conv_mem_size = conv_mem_size_local; 
+	// 从外部数据中取值，不过大概率会被优化成局部取值，如果数据流分析工作的话
+	he_info("Convertible Memory size: 0x%llx\n", conv_mem_size);
 }
 
 #endif 
