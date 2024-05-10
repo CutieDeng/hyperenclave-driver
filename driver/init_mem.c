@@ -6,12 +6,13 @@
  */
 
 
-#include <asm/e820/types.h>
+// #include <asm/e820/types.h>
 
 #include <linux/kernel.h>
 #include <linux/sort.h>
 
 #include <linux/of.h>
+#include <linux/of_address.h>
 
 #include <hyperenclave/hypercall.h>
 #include <hyperenclave/log.h>
@@ -52,8 +53,11 @@
  * The 'e820_table_firmware' records the original firmware version passed to us by the
  * bootloader. It is not modified by kernel.
  */
-static struct e820_table *e820_table_firmware;
-static struct e820_table **e820_table_firmware_sym;
+// static struct e820_table *e820_table_firmware;
+// static struct e820_table **e820_table_firmware_sym;
+
+// E820 相关的值不会超过 CONV 才对. 
+#define E820_MAX_ENTRIES MAX_CONV_MEM_REGIONS
 
 static struct memory_range e820_system_ram[E820_MAX_ENTRIES];
 
@@ -95,28 +99,29 @@ unsigned long long memmap_end;
 /* The size of hypervisor heap */
 static unsigned long long hv_heap_size;
 
-static const char *e820_type_to_string(struct e820_entry *entry)
-{
-	switch (entry->type) {
-	case E820_TYPE_RESERVED_KERN: /* Fall-through: */
-	case E820_TYPE_RAM:
-		return "System RAM";
-	case E820_TYPE_ACPI:
-		return "ACPI Tables";
-	case E820_TYPE_NVS:
-		return "ACPI Non-volatile Storage";
-	case E820_TYPE_UNUSABLE:
-		return "Unusable memory";
-	case E820_TYPE_PRAM:
-		return "Persistent Memory (legacy)";
-	case E820_TYPE_PMEM:
-		return "Persistent Memory";
-	case E820_TYPE_RESERVED:
-		return "Reserved";
-	default:
-		return "Unknown E820 type";
-	}
-}
+// 移除关于 e820 entry 的类型信息查询
+// static const char *e820_type_to_string(struct e820_entry *entry)
+// {
+// 	switch (entry->type) {
+// 	case E820_TYPE_RESERVED_KERN: /* Fall-through: */
+// 	case E820_TYPE_RAM:
+// 		return "System RAM";
+// 	case E820_TYPE_ACPI:
+// 		return "ACPI Tables";
+// 	case E820_TYPE_NVS:
+// 		return "ACPI Non-volatile Storage";
+// 	case E820_TYPE_UNUSABLE:
+// 		return "Unusable memory";
+// 	case E820_TYPE_PRAM:
+// 		return "Persistent Memory (legacy)";
+// 	case E820_TYPE_PMEM:
+// 		return "Persistent Memory";
+// 	case E820_TYPE_RESERVED:
+// 		return "Reserved";
+// 	default:
+// 		return "Unknown E820 type";
+// 	}
+// }
 
 static int cmp_func(const void *a, const void *b)
 {
@@ -124,11 +129,12 @@ static int cmp_func(const void *a, const void *b)
 		((struct memory_range *)b)->start ? 1 : -1;
 }
 
-#if defined(ARM) || defined(ARM64) 
+#if defined(CONFIG_ARM) || defined(CONFIG_ARM64) 
 // #if 1 
 
 int get_convertible_memory(void ) {
 	int sys_ram_num = 0; 
+	int i; 
 	struct device_node *memory = of_find_node_by_type(NULL, "memory"); 
 	struct resource r;
     unsigned long long prev_end;
@@ -143,7 +149,7 @@ int get_convertible_memory(void ) {
     }
 
     // for_each_of_allnodes(memory) {
-    while (memory = of_find_node_by_type(memory, "memory") != NULL) { 
+    while ((memory = of_find_node_by_type(memory, "memory")) != NULL) { 
 		// 忽略错误的设备节点
         if (of_address_to_resource(memory, 0, &r)) continue; 
 		// 直接检查它是否满足 conv mem regions 即可，无需纠结关于 E820 的兼容性问题
@@ -209,7 +215,7 @@ int get_convertible_memory(void ) {
 			start = ALIGN_UP(start, SZ_4K); 
 			end = ALIGN_DOWN(end, SZ_4K); 
 			if (start < end) {
-				conv_mem_ranges[nr_conv_mem_local] = { .start = start, .size = end - start }; 
+				conv_mem_ranges[nr_conv_mem_local] = (struct memory_range) { .start = start, .size = end - start }; 
 				nr_conv_mem_local += 1; 
 			}
 			if (i == sys_ram_num) {
@@ -241,9 +247,13 @@ int get_convertible_memory(void ) {
 	conv_mem_size = conv_mem_size_local; 
 	// 从外部数据中取值，不过大概率会被优化成局部取值，如果数据流分析工作的话
 	he_info("Convertible Memory size: 0x%llx\n", conv_mem_size);
+
+	return 0; 
 }
 
 #endif 
+
+#ifdef CONFIG_X86
 
 int get_convertible_memory(void)
 {
@@ -345,6 +355,8 @@ int get_convertible_memory(void)
 
 	return 0;
 }
+
+#endif 
 
 int get_valid_rsrv_mem(void)
 {
