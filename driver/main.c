@@ -653,6 +653,8 @@ static int __init he_init(void)
 	if ((err = get_valid_rsrv_mem()) != 0)
 		return err;
 
+	// 初始化一些 feature 相关的 flag, 同时提取出被修正、可以直接使用的 hv_feature_mask 值
+	// 此值满足某些断言，与特性内容相关，以便快速进行位运算
 	hv_feature_mask = feature_init(feature_mask);
 
 	if (memory_test_enabled) {
