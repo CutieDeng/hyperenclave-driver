@@ -38,6 +38,11 @@
 #include <asm/msr.h>
 #endif
 
+#if defined(CONFIG_ARM) || defined(CONFIG_ARM64) 
+#include <linux/kallsyms.h> 
+#include <linux/mm.h>
+#endif 
+
 #include <generated/version.h>
 #include <hyperenclave/header.h>
 #include <hyperenclave/hypercall.h>
@@ -93,6 +98,7 @@ struct memory_range hv_range;
 
 char *str_memmap[2];
 int len_memmap_paras;
+// module_param_array 将命令行参数传递给内核模块
 module_param_array(str_memmap, charp, &len_memmap_paras, S_IRUGO);
 MODULE_PARM_DESC(str_memmap, "The memmap reserved ranges in string");
 
@@ -113,14 +119,14 @@ static unsigned long long hv_feature_mask;
 #define MAX_HASH_SIZE 32
 
 typeof(ioremap_page_range) *ioremap_page_range_sym;
-#ifdef CONFIG_X86
 typeof(flush_tlb_kernel_range) *flush_tlb_kernel_range_sym;
-#endif
+
 #ifdef CONFIG_ARM
 static typeof(__boot_cpu_mode) *__boot_cpu_mode_sym;
 #endif
 #if defined(CONFIG_ARM) || defined(CONFIG_ARM64)
-static typeof(__hyp_stub_vectors) *__hyp_stub_vectors_sym;
+// static typeof(__hyp_stub_vectors) *__hyp_stub_vectors_sym;
+static void **__hyp_stub_vectors_sym;
 #endif
 
 typeof(printk_safe_flush) *printk_safe_flush_sym;
@@ -606,18 +612,30 @@ static int __init he_init(void)
 {
 	int err;
 
+	// 解析若干动态符号，以便接下来进行调用
+	// ioremap_page_range: 将物理内存映射到内核的虚拟空间	
 	RESOLVE_EXTERNAL_SYMBOL(ioremap_page_range);
+	// flush_tlb_kernel_range: 清除 TLB 
 	RESOLVE_EXTERNAL_SYMBOL(flush_tlb_kernel_range);
 #ifdef CONFIG_ARM
+	// __boot_cpu_mode: 查询 ?? 启动时 cpu 的处理器模式 
 	RESOLVE_EXTERNAL_SYMBOL(__boot_cpu_mode);
 #endif
 #if defined(CONFIG_ARM) || defined(CONFIG_ARM64)
-	RESOLVE_EXTERNAL_SYMBOL(__hyp_stub_vectors);
+	// 用于 Hypervisor 模式的中断向量表的入口点 
+	// 当配置了 KVM, 即虚拟化支持时，该符号被定义
+	// RESOLVE_EXTERNAL_SYMBOL(__hyp_stub_vectors);
 #endif
+	// printk_safe_flush: 输出 printk 缓冲区中消息 
+	// 可以在中断过程中用该调用及时输出日志信息
 	RESOLVE_EXTERNAL_SYMBOL(printk_safe_flush);
+	// mmput_async: 异步释放 mm_struct, 用于进行进程地址空间管理
 	RESOLVE_EXTERNAL_SYMBOL(mmput_async);
 
+	// 检测当前 cpu 型号
+	// ARM: 空函数
 	cpu_vendor_detect();
+
 	tdm_init();
 
 	if (!get_memmap_paras())

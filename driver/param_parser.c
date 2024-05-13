@@ -60,9 +60,23 @@ bool get_memmap_paras(void)
 		print_module_usage("ERROR, invalid reserved regions number");
 		return false;
 	}
-
-	memmap_start = memparse(str_memmap[0], NULL);
-	memmap_size = memparse(str_memmap[1], NULL);
+	
+	// 增加对 parse 过程的输入、输出检验；robust enhance 
+	char *ret; 
+	memmap_start = memparse(str_memmap[0], &ret);
+	if (*ret) {
+		print_module_usage(
+			"ERROR, invalid reserved memory size" 
+		); 
+		return false; 
+	}
+	memmap_size = memparse(str_memmap[1], &ret);
+	if (*ret) {
+		print_module_usage(
+			"ERROR, invalid reserved memory size" 
+		); 
+		return false; 
+	}
 	if (!memmap_size || !IS_ALIGNED(memmap_size, SZ_1G) ||
 	    !IS_ALIGNED(memmap_size, SZ_1G)) {
 		print_module_usage(

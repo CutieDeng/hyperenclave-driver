@@ -9,8 +9,17 @@
 
 #ifdef CONFIG_X86
 unsigned long get_sme_mask(void);
-#else
+// #elif defined(CONFIG_ARM) || defined(CONFIG_ARM64)
+#elif 1 
 unsigned long get_sme_mask(void)
 {
+    return 0; 
 }
+#else 
+
+#error "unimpl get sme mask" 
+// unsigned long get_sme_mask(void)
+// {
+
+// }
 #endif

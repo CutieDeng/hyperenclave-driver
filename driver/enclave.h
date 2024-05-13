@@ -5,10 +5,13 @@
  * Copyright (C) 2020-2023 The HyperEnclave Project. All rights reserved.
  */
 
-#ifndef _DRIVER_ENCLAVE_H
-#define _DRIVER_ENCLAVE_H
+#pragma once 
 
 #include <linux/kref.h>
+
+#if 1
+#include <linux/uaccess.h>
+#endif 
 
 #include <hyperenclave/enclave_config.h>
 
@@ -144,5 +147,3 @@ struct encl_page *he_encl_load_page(struct he_enclave *encl,
 				    unsigned long addr);
 
 void he_zap_enclave_ptes(struct he_enclave *encl, unsigned long addr);
-
-#endif

@@ -192,7 +192,7 @@ int find_enclave(struct mm_struct *mm, unsigned long addr,
 
 	// mmap_sem 字段不存在，使用 mmap_lock 代替
 	// down_read(&mm->mmap_sem);
-	down_read(&mm->mmap_lock);
+	down_read(&mm->mmap_sem);
 
 	vma = find_vma(mm, addr);
 	// 检查 vma 的可用性. 
@@ -201,7 +201,7 @@ int find_enclave(struct mm_struct *mm, unsigned long addr,
 	// - 地址在 vma start 与 vma end 之间 (?), 不是 find 了吗？
 	if (!vma || vma->vm_ops != &he_vm_ops || addr < vma->vm_start) {
 		// up_read(&mm->mmap_sem);
-		up_read(&mm->mmap_lock);
+		up_read(&mm->mmap_sem);
 		he_err("find_vma failed\n");
 		return -EINVAL;
 	}
@@ -214,7 +214,7 @@ int find_enclave(struct mm_struct *mm, unsigned long addr,
 
 	// 改成只做外部读入
 	encl_data = vma->vm_private_data; 
-	up_read(&mm->mmap_lock); 
+	up_read(&mm->mmap_sem); 
 
 	// 外部写出 
 	*encl = encl_data; 
@@ -312,15 +312,15 @@ int he_cmd_encl_create(struct he_encl_create __user *arg)
 
 	encl->mm = current->mm;
 	// down_read(&current->mm->mmap_sem);
-	down_read(&current->mm->mmap_lock);
+	down_read(&current->mm->mmap_sem);
 	vma = find_vma(current->mm, encl->config.start_gva);
 	if (vma) {
 		vma->vm_private_data = encl;
 		// up_read(&current->mm->mmap_sem);
-		up_read(&current->mm->mmap_lock);
+		up_read(&current->mm->mmap_sem);
 	} else {
 		// up_read(&current->mm->mmap_sem);
-		up_read(&current->mm->mmap_lock);
+		up_read(&current->mm->mmap_sem);
 		err = -EINVAL;
 		he_err("encl: 0x%px, find_vma failed\n", encl);
 		goto out_destroy_backing;
@@ -446,7 +446,7 @@ int he_cmd_encl_add_page(struct he_encl_add_page __user *arg)
 	}
 
 	// down_read(&current->mm->mmap_sem);
-	down_read(&current_mm->mmap_lock);
+	down_read(&current_mm->mmap_sem);
 
 	// 查找 VMA, 并检查其地址有效性
 	// vma = find_vma(current->mm, enclave_lin_addr);
@@ -455,7 +455,7 @@ int he_cmd_encl_add_page(struct he_encl_add_page __user *arg)
 	if (!vma || vma->vm_ops != &he_vm_ops ||
 	    enclave_lin_addr < vma->vm_start) {
 		// up_read(&current->mm->mmap_sem);
-		up_read(&current_mm->mmap_lock);
+		up_read(&current_mm->mmap_sem);
 		he_err("encl: 0x%px, find_vma failed\n", encl);
 		err = -EINVAL;
 		goto err_free_va_page;
@@ -466,7 +466,7 @@ int he_cmd_encl_add_page(struct he_encl_add_page __user *arg)
 	err = vmf_insert_pfn(vma, enclave_lin_addr, PFN_DOWN(epc_page_pa));
 
 	// up_read(&current->mm->mmap_sem);
-	up_read(&current_mm->mmap_lock);
+	up_read(&current_mm->mmap_sem);
 
 	if (err != VM_FAULT_NOPAGE) {
 		he_err("encl: 0x%px, insert_pfn failed\n", encl);
@@ -1208,7 +1208,7 @@ void he_zap_enclave_ptes(struct he_enclave *encl, unsigned long addr)
 
 	// down_read(&encl->mm->mmap_sem);
 
-	down_read(&mm->mmap_lock);
+	down_read(&mm->mmap_sem);
 	vma = find_vma(mm, addr);
 	// 这里硬编码了一个 PAGE_SIZE, 
 	// 也就是说，这个 zap enclave page 调用只支持处理简单的 PAGE_SIZE 页面的移除？
@@ -1218,7 +1218,7 @@ void he_zap_enclave_ptes(struct he_enclave *encl, unsigned long addr)
 	}
 
 	// up_read(&encl->mm->mmap_sem);
-	up_read(&mm->mmap_lock);
+	up_read(&mm->mmap_sem);
 
 	// mmput_async_sym(encl->mm);
 	mmput_async_sym(mm);

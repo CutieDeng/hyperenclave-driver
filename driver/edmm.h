@@ -5,8 +5,7 @@
  * Copyright (C) 2020-2023 The HyperEnclave Project. All rights reserved.
  */
 
-#ifndef _DRIVER_EDMM_H
-#define _DRIVER_EDMM_H
+#pragma once 
 
 #include "enclave.h"
 
@@ -18,5 +17,3 @@ int he_cmd_edmm_enabled(void __user *arg);
 int he_cmd_encl_restrict_permissions(void __user *arg);
 int he_cmd_encl_modify_types(void __user *arg);
 int he_cmd_encl_remove_pages(void __user *arg);
-
-#endif

@@ -9,13 +9,8 @@
 #include <hyperenclave/vendor.h>
 
 extern const struct tdm_ops hygon_tdm_ops;
-/// 全局的 trust domain manager 实例
-/// 救命，为什么要用同名变量呀，求你有点良心吧！
-/// 加个别名 global_tdm 给你
-struct tdm tdm 
-// [[gnu::alias("global_tdm")]]
-__alias(global_tdm)
-; 
+
+struct tdm tdm; 
 
 static int generic_proc_init(void)
 {
@@ -73,10 +68,15 @@ const struct tdm_ops generic_tdm_ops = {
 	.get_tdm_size = generic_get_tdm_size,
 };
 
+/// @brief 根据当前 cpu 型号，即 vendor, 设置相应的 tdm ops. 
+/// 事实上，只有 cpu vendor 为 HE_X86_VENDOR_HYGON 时，才有对 tdm ops 的特化代码：hygon_tdm_osp; 
+/// 否则，退化到通用调用 generic_tdm_ops. 
+/// @param   
 void tdm_init(void)
 {
-	if (vendor == HE_X86_VENDOR_HYGON)
+	if (vendor == HE_X86_VENDOR_HYGON) {
 		tdm.ops = &hygon_tdm_ops;
-	else
+	} else {
 		tdm.ops = &generic_tdm_ops;
+	}
 }

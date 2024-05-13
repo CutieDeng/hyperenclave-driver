@@ -22,6 +22,7 @@ enum cpu_vendor {
 	HE_ARM_VENDOR_QUALCOMM,
     HE_ARM_VENDOR_SAMSUNG,
     HE_ARM_VENDOR_NVIDIA,
+
 	// 为我保留
 	RESERVED 
 };
@@ -42,6 +43,8 @@ void cpu_vendor_detect(void);
 
 #else 
 
-static inline void cpu_vendor_detect(void) {} 
+static inline void cpu_vendor_detect(void) {
+	vendor = HE_VENDOR_UNKNOWN; 
+} 
 
 #endif
