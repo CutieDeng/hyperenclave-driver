@@ -636,14 +636,20 @@ static int __init he_init(void)
 	// ARM: 空函数
 	cpu_vendor_detect();
 
+	// 初始化 trust domain manager 
 	tdm_init();
 
+	// 初始化 memmap 参数，即一段 memmap 所描述的连续地址空间，且要求对 1G 对齐
 	if (!get_memmap_paras())
 		return -EINVAL;
 
+	// 初始化 .. 
+	// 相关内存段顺序存入 conv_mem_ranges 中
 	if ((err = get_convertible_memory()) != 0)
 		return err;
 
+	// 初始化  
+	// 根据输入想要保留的内存，从 conv mem ranges 中划出相应内存来
 	if ((err = get_valid_rsrv_mem()) != 0)
 		return err;
 

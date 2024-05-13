@@ -130,7 +130,6 @@ static int cmp_func(const void *a, const void *b)
 }
 
 #if defined(CONFIG_ARM) || defined(CONFIG_ARM64) 
-// #if 1 
 
 int get_convertible_memory(void ) {
 	int sys_ram_num = 0; 
@@ -286,6 +285,12 @@ int get_convertible_memory(void)
 		return -ENOMEM;
 	}
 
+	// 处理越界情形
+	if (sys_ram_num >= E820_MAX_ENTRIES) {
+		he_err("Out of bounds, E820 entry\n"); 
+		return -NOMEM; 
+	}
+
 	/* Sort the 'e820_system_ram'. */
 	sort(e820_system_ram, sys_ram_num, sizeof(struct memory_range),
 	     cmp_func, NULL);
@@ -363,28 +368,39 @@ int get_valid_rsrv_mem(void)
 	int i, start_cmem_idx = -1, end_cmem_idx = -1;
 	unsigned long long start, end;
 
+	// 甚至连二分法都不舍得用一下
 	for (i = 0; i < nr_conv_mem; i++) {
+		// end 顺序便历 conv mem range 的末尾
 		end = conv_mem_ranges[i].start + conv_mem_ranges[i].size;
 
+		// 直到确定 end 超过 memmap_start, 即估计 start_cmem_idx 与 memmap 所对应的内存有交集.. 
+		// 且 start cmem idx 可能为满足该条件的最小值
 		if (end > memmap_start) {
 			start_cmem_idx = i;
 			break;
 		}
 	}
 	for (i = nr_conv_mem - 1; i >= 0; i--) {
+		// 同理，逆序遍历 
 		start = conv_mem_ranges[i].start;
 
+		// 确定 start 小于 memmap end 的位置
 		if (start < memmap_end) {
 			end_cmem_idx = i;
 			break;
 		}
 	}
+	
+	// 若任意一段为 -1, 即之前的判定无法成立
+	// 即找不到一段实际的物理内存，它的末尾在 memmap start 之后，或者反之 
+	// 这显然意味着无法进行正确的内存空间分配
 	if (start_cmem_idx == -1 || end_cmem_idx == -1) {
 		he_err("Convertible memory range[min: 0x%llx, max: 0x%llx] "
 		       "does not intersect with 'memmap' regions in command line[0x%llx -> 0x%llx].",
 		       conv_mem_start, conv_mem_end, memmap_start, memmap_end);
 		return -EINVAL;
 	}
+	// 检查连续的内存块是否超过了 MAX_RSRV_MEM_REGIONS 的范围. 
 	if (end_cmem_idx - start_cmem_idx + 1 > MAX_RSRV_MEM_REGIONS) {
 		he_err("There is no enough space for 'rsrv_mem_ranges' array, needs: %d",
 		       end_cmem_idx - start_cmem_idx + 1);
@@ -392,6 +408,7 @@ int get_valid_rsrv_mem(void)
 	}
 
 	nr_rsrv_mem = 0;
+	// 又一通对齐、操作，把 conv mem 相关的内存块中，与 memmap 有交集的所有块，都放到 rsrv mem ranges 中
 	for (i = start_cmem_idx; i <= end_cmem_idx; i++) {
 		start = conv_mem_ranges[i].start;
 		end = conv_mem_ranges[i].start + conv_mem_ranges[i].size;
@@ -412,12 +429,16 @@ int get_valid_rsrv_mem(void)
 		}
 	}
 
+	// 判空... 这个判了有啥意义 ... 
+	// 而且这个判空是可能成立的吗？
+	// 除非 memmap 并不是一个真正的区间 (?) 
 	if (nr_rsrv_mem == 0) {
 		he_err("There is no valid memory regions in command-line's 'memmap' regions: [0x%llx -> 0x%llx]\n",
 		       memmap_start, memmap_end);
 		return -EINVAL;
 	}
 
+	// 来点调试信息，查询要保留的内存的大小
 	rsrv_mem_size = 0;
 	for (i = 0; i < nr_rsrv_mem; i++) {
 		he_info("Reserved Memory[%2d]: 0x%llx -> 0x%llx\n", i,
