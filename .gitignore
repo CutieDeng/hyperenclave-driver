@@ -5,3 +5,6 @@
 *.o.cmd
 *.o
 include/generated/
+Module.symvers
+modules.order 
+*.order

@@ -67,4 +67,4 @@ unsigned long get_sme_mask(void)
 	sme_mask = 1UL << (ebx & 0x3f);
 	he_info("SME mask: [0x%lx]\n", sme_mask);
 	return sme_mask;
-}
+} 

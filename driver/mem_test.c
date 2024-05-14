@@ -8,24 +8,45 @@
 #include <hyperenclave/log.h>
 #include <hyperenclave/sme.h>
 
+#include <linux/dma-mapping.h>
+#include <linux/device.h> 
+#include <linux/module.h> 
+
 #include "main.h"
 #include "init_mem.h"
 #include "ioremap.h"
 
 #if defined(CONFIG_ARM) || defined(CONFIG_ARM64) 
-static void wbinvd_on_all_cpus_impl(void *_info) { 
+static void wbinvd_on_all_cpus_impl(void *arg) { 
 	// 执行数据缓存清除和无效化操作
     // `dsb` 用于数据同步障碍，确保缓存操作在继续之前完成
     // `isb` 用于指令同步障碍，确保所有先前指令完成
     // `dmb` 用于数据内存障碍，确保内存访问顺序一致
-	asm volatile ("dsb sy");
-    asm volatile ("isb");
-    asm volatile ("dmb sy");
+	asm volatile ("dsb sy":::"memory");
+    asm volatile ("isb":::"memory");
+    asm volatile ("dmb sy":::"memory");
+	// ??? 
+	if (arg) {
+		asm volatile ("dc cisw, %0" :: "r" (arg) : "memory"); 
+	}
 }
 void wbinvd_on_all_cpus(void ); 
 void wbinvd_on_all_cpus() { 
 	on_each_cpu(wbinvd_on_all_cpus_impl, NULL, 1); 
 }
+// help, 这个 api 什么意思？
+#define __cpuc_flush_dcache_area() do { \
+	on_each_cpu(wbinvd_on_all_cpus_impl, ((void * )addr), 1); \
+} while (0); 
+
+#endif 
+
+#if defined(CONFIG_ARM) || defined(CONFIG_ARM64) 
+void flush_cache_area(void *addr, size_t size, struct device *dev)
+{
+	dma_sync_single_for_cpu(dev, virt_to_phys(addr), size, DMA_TO_DEVICE); 
+	dma_sync_single_for_device(dev, virt_to_phys(addr), size, DMA_FROM_DEVICE); 
+} 
 #endif 
 
 static unsigned long gen_magic_num(unsigned long addr)

@@ -7,14 +7,11 @@
 
 #pragma once 
 
-#ifdef CONFIG_X86
+// ARM 上 SME 支持为空
 unsigned long get_sme_mask(void);
+
+#ifdef CONFIG_X86
 #elif defined(CONFIG_ARM) || defined(CONFIG_ARM64)
-unsigned long get_sme_mask(void)
-{
-    he_info("AArch64 CPU does not enable SME\n");
-    return 0; 
-}
 #else 
 #error "unimpl get sme mask" 
 #endif

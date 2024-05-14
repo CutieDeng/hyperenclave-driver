@@ -132,8 +132,9 @@ static void **__hyp_stub_vectors_sym;
 typeof(printk_safe_flush) *printk_safe_flush_sym;
 void (*mmput_async_sym)(struct mm_struct *mm);
 
-#ifdef CONFIG_X86
 bool use_vmcall;
+
+#ifdef CONFIG_X86
 
 static void init_hypercall(void)
 {
