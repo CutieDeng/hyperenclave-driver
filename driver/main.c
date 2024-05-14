@@ -650,6 +650,8 @@ static int __init he_init(void)
 
 	// 初始化  
 	// 根据输入想要保留的内存，从 conv mem ranges 中划出相应内存来
+	// 问题来了，valid rsrv mem 内存可能是间断的，而不是连续的，即物理内存中与 memmap 中描述的内存之间确实
+	// 存在交集，但并不是绝对有一方包含另一方的关系，这种关系应当正确工作吗？
 	if ((err = get_valid_rsrv_mem()) != 0)
 		return err;
 
@@ -657,6 +659,9 @@ static int __init he_init(void)
 	// 此值满足某些断言，与特性内容相关，以便快速进行位运算
 	hv_feature_mask = feature_init(feature_mask);
 
+	// memory test 正是可以被初始化的 feature 之一
+	// 当开启该 feature 时，则会进行 mem test. 
+	// 该测试是用于验证保留内存区域的完整性和正确性
 	if (memory_test_enabled) {
 		if (!mem_test()) {
 			he_err("Memory test failed, please validate the reserved region\n");

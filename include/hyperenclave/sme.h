@@ -9,17 +9,12 @@
 
 #ifdef CONFIG_X86
 unsigned long get_sme_mask(void);
-// #elif defined(CONFIG_ARM) || defined(CONFIG_ARM64)
-#elif 1 
+#elif defined(CONFIG_ARM) || defined(CONFIG_ARM64)
 unsigned long get_sme_mask(void)
 {
+    he_info("AArch64 CPU does not enable SME\n");
     return 0; 
 }
 #else 
-
 #error "unimpl get sme mask" 
-// unsigned long get_sme_mask(void)
-// {
-
-// }
 #endif

@@ -12,8 +12,25 @@
 #include "init_mem.h"
 #include "ioremap.h"
 
+#if defined(CONFIG_ARM) || defined(CONFIG_ARM64) 
+static void wbinvd_on_all_cpus_impl(void *_info) { 
+	// 执行数据缓存清除和无效化操作
+    // `dsb` 用于数据同步障碍，确保缓存操作在继续之前完成
+    // `isb` 用于指令同步障碍，确保所有先前指令完成
+    // `dmb` 用于数据内存障碍，确保内存访问顺序一致
+	asm volatile ("dsb sy");
+    asm volatile ("isb");
+    asm volatile ("dmb sy");
+}
+void wbinvd_on_all_cpus(void ); 
+void wbinvd_on_all_cpus() { 
+	on_each_cpu(wbinvd_on_all_cpus_impl, NULL, 1); 
+}
+#endif 
+
 static unsigned long gen_magic_num(unsigned long addr)
 {
+	__cpuc_flush_dcache_area();	
 	return addr;
 }
 
@@ -26,11 +43,15 @@ bool mem_test(void)
 	unsigned long remain_size, batch_size, size;
 	unsigned long region_idx, ptr_pos;
 
+	// 疑似竞态访问，检查当前 hyper enclave 是否异步关闭
+	// 但没有进行任何相关的线程安全控制
+	// 简要地说，也许可以考虑加个 _Atomic ? 
 	if (hyper_enclave_enabled) {
 		he_err("Cannot perform memory test with hyper enclave enabled\n");
 		return false;
 	}
 
+	// 
 	/* Perform memory test in 8GB granularity */
 	batch_size = 8L * 1024 * 1024 * 1024;
 	page_attr = pgprot_val(PAGE_KERNEL);

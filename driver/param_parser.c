@@ -54,6 +54,7 @@ static void print_module_usage(char *s)
  */
 bool get_memmap_paras(void)
 {
+	char *ret; 
 	unsigned long long memmap_size;
 
 	if (len_memmap_paras != 2) {
@@ -62,7 +63,6 @@ bool get_memmap_paras(void)
 	}
 	
 	// 增加对 parse 过程的输入、输出检验；robust enhance 
-	char *ret; 
 	memmap_start = memparse(str_memmap[0], &ret);
 	if (*ret) {
 		print_module_usage(
