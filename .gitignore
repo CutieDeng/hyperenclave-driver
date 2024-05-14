@@ -8,3 +8,5 @@ include/generated/
 Module.symvers
 modules.order 
 *.order
+driver/hyper_enclave.ko
+driver/.hyper_enclave.ko.cmd

@@ -74,9 +74,13 @@ const struct tdm_ops generic_tdm_ops = {
 /// @param   
 void tdm_init(void)
 {
+#if defined(CONFIG_ARM) || defined(CONFIG_ARM64) 
+	tdm.ops = &generic_tdm_ops;
+#elif defined(CONFIG_X86) 
 	if (vendor == HE_X86_VENDOR_HYGON) {
 		tdm.ops = &hygon_tdm_ops;
 	} else {
 		tdm.ops = &generic_tdm_ops;
 	}
+#endif 
 }
